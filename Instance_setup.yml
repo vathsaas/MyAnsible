@@ -1,0 +1,74 @@
+- hosts: localhost
+  connection: local
+ 
+  tasks:
+  - ec2_group:
+      name: Web_Security_group
+      description: Web security group
+      state: present
+      vpc_id: "vpc-29ca6e4d"
+      region: us-west-2
+      rules:
+       - proto: tcp
+         from_port: 80
+         to_port: 80
+         cidr_ip: 0.0.0.0/0
+         
+       - proto: tcp
+         from_port: 443
+         to_port: 443
+         cidr_ip: 0.0.0.0/0
+       
+       - proto: tcp
+         from_port: 22
+         to_port: 22
+         cidr_ip: 73.128.25.235/32
+       
+  - ec2_group_facts:
+     region: us-west-2
+     filters:
+      group_name: Web_Security_group
+    register: sg_facts
+
+  - ec2: 
+     key_name: ec2keys
+     region: us-west-2
+     vpc_subnet_id: "subnet-b74ae8d3"
+     group_id: "{{sg_facts.security_groups[0].group_id}}"
+     termination_protection: no
+     assign_public_ip: yes
+     image: ami-6e1a0117
+     count: 1
+     instance_type: t2.micro
+     instance_tags:
+      Name: Webserver
+     wait: yes
+     wait_timeout: 300
+
+  - name: sleep for 10 seconds and continue with play
+    wait_for: timeout=10
+
+  - ec2_instance_facts:
+     region: us-west-2
+     filters:
+      "tag:Name": Webserver
+      instance-state-name: running
+    register: ws_facts
+ 
+  - ec2_eip:
+     region: us-west-2
+     device_id: "{{ ws_facts.instances[0].instance_id }}"
+     ip: 34.216.29.96 
+ 
+  - ec2_instance_facts:
+     region: us-west-2
+     filters:
+      "tag:Name": Webserver
+      instance-state-name: running
+    register: ws_facts
+  
+  - name: sleep for 15 seconds and continue with play
+    wait_for: timeout=15
+
+  - name: add new instance to host group at runtime
+    add_host: hostname={{ ws_facts.instances[0].public_ip_address }} groupname=webserver

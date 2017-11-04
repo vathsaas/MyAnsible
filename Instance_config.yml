@@ -1,0 +1,76 @@
+- hosts: webserver   # Group name of the hosts in ansible configuration under which the IP of the new server is added.
+  become: true
+  remote_user: ubuntu
+  gather_facts: no
+  pre_tasks:
+  - name: 'install python2'
+    raw: sudo apt-get -y install python-simplejson && apt-get install -y python-botocore
+  tasks:
+  - name: Update apt repo
+    apt: update_cache=yes
+    become: true
+    become_user: root
+  - name: nginx
+    apt: name=nginx state=latest
+    become: true
+    become_user: root
+  - name: Install make
+    apt: name=make state=latest
+    become: true
+    become_user: root
+  - name: Install gcc
+    apt: name=gcc
+    become: true
+    become_user: root
+  - name: Install Openssl
+    apt: name=openssl
+    become: true
+    become_user: root
+  - name: Install Openssl Devel
+    apt: name=libssl-dev
+    become: true
+    become_user: root
+  - name: Install git
+    apt: name=git state=latest
+    become: true
+    become_user: root
+  - name: Start Nginx
+    action: shell service nginx start
+    become: true
+    become_user: root
+  - name: Download confs and test script
+    action: command chdir=/tmp git clone https://github.com/vathsaas/Confs.git
+    become: true
+    become_user: root
+  - name: Remove default vhost setting
+    action: shell rm -rf /etc/nginx/sites-available/default
+    become: true
+    become_user: root
+  - name: Add correct default vhost setting
+    action: shell mv /tmp/Confs/default /etc/nginx/sites-available/
+    become: true
+    become_user: root
+  - name: Add index.html 
+    action: shell mv /tmp/Confs/index.html /var/www/html/
+    become: true
+    become_user: root
+  - file:
+     path: /etc/nginx/ssl
+     state: directory
+     mode: 0400
+    become: true
+    become_user: root
+  - name: create self-signed SSL cert
+    command: openssl req -new -nodes -x509 -subj "/C=US/ST=Oregon/L=Portland/O=IT/CN=34.216.29.96" -days 3650 -keyout /etc/nginx/ssl/server.key -out /etc/nginx/ssl/server.crt -extensions v3_ca creates=/etc/nginx/ssl/server.crt
+    become: true
+    become_user: root
+  - name: Restart Nginx
+    action: shell service nginx restart
+    become: true
+    become_user: root
+  - name: Running test script
+    action: shell sh /tmp/Confs/test.sh
+    become: true
+    become_user: root
+    register: output
+  - debug: var=output.stdout_lines
