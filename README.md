@@ -2,6 +2,7 @@
 The above script is  for automating a standalone EC2 Instance on AWS and configuring it to serve a basic HTML page.
 
 Requirements:-
+
 Ansible 2.0 or greater
 
 Python 2.7 or greater
@@ -32,7 +33,7 @@ git clone https://github.com/vathsaas/SREChallenge.git
 
 2> Open the SREChallenge folder 
 
-3> Open Instance_setup.yml and make changes on lines
+3> Open Instance_setup.yml and make changes on lines 9,10,25,28,35,41,42,43,58,65,67,70 because these are environment specific variables and differ from one AWS environmentto other.
 
 4> After the changes are done we are ready to execute the script
 
