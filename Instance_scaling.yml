@@ -1,0 +1,112 @@
+# Creating AMI Out of the Webserver and scaling 
+
+- hosts: localhost
+  connection: local
+  tasks:
+    - ec2_instance_facts:
+      region: us-west-2
+      filters:
+       "tag:Name": Webserver
+       instance-state-name: running
+      register: ws_facts
+  
+    - ec2_ami:
+      region: us-west-2
+      instance_id: "{{ ws_facts.instances[0].instance_id }}"
+      wait: yes
+      name: webserver-scaling
+      tags:
+       Name: webserver-scaling
+      register: image
+
+    - ec2_elb_lb:
+       name : Webserver
+       state : present
+       subnets : subnet-b74ae8d3
+       listeners:
+       - protocol : http
+         load_balancer_port : 80
+         instance_port: 80
+         proxy_protocol : True
+
+    - ec2_ami_find:
+      region: us-west-2
+      owner: self
+      ami_tags:
+       Name: webserver-scaling
+      no_result_action: fail
+      register: ami_find
+
+    - ec2_group_facts:
+      region: us-west-2
+      filters:
+       group_name: Web_Security_group
+      register: sg_facts
+
+    - ec2_lc:
+       name : Webserver-lc
+       image_id : "{{ ami_find.results[0].ami_id }}"
+       key_name : ec2keys
+       region : us-west-2
+       security_groups : "{{sg_facts.security_groups[0].group_id}}"
+       instance_type : t2.micro
+       assign_public_ip : yes
+
+    - ec2_asg:
+       name : Webserver-asg
+       load_balancers : Webserver
+       launch_config_name : Webserver-lc
+       health_check_period : 300
+       health_check_type : ELB
+       min_size : 1
+       max_size : 2
+       desired_capacity: 1
+       vpc_zone_identifier : subnet-b74ae8d3
+       region : us-west-2
+
+    - ec2_scaling_policy:
+       state: present
+       region: us-west-2
+       asg_name: Webserver-asg
+      with_items:
+       - name: "Increase Group Size"
+         adjustment_type: "ChangeInCapacity"
+         scaling_adjustment: +1
+         min_adjustment_step: 1
+         cooldown: 180
+       - name: "Decrease Group Size"
+         adjustment_type: "ChangeInCapacity"
+         scaling_adjustment: -1
+         min_adjustment_step: 1
+         cooldown: 300
+      register: sp_fact
+
+    - name: Determine Metric Alarm configuration
+      set_fact:
+       metric_alarms:
+        - name: Webserver-asg-ScaleUp
+          comparison: ">="
+          threshold: 60.0
+          alarm_actions:
+           - "{{ sp_fact.results[0].arn }}"
+        - name: Webserver-asg-ScaleDown
+          comparison: "<="
+          threshold: 30.0
+          alarm_actions:
+           - "{{ sp_fact.results[1].arn }}"
+
+    - ec2_metric_alarm:
+       region: us-west-2
+       name: Webserver-alarm
+       state: present
+       metric: "CPUUtilization"
+       namespace: "AWS/EC2"
+       statistic: "Average"
+       period: 60
+       evaluation_periods: 5
+       unit: "Percent"
+       dimensions:
+        AutoScalingGroupName: Webserver-asg
+      with_items: metric_alarms
+      when: max_size > 1
+      register: ma_result
