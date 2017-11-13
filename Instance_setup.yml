@@ -54,18 +54,9 @@
       "tag:Name": Webserver
       instance-state-name: running
     register: ws_facts
- 
-  - ec2_eip:
-     region: us-west-2
-     device_id: "{{ ws_facts.instances[0].instance_id }}"
-     ip: 34.216.29.96 
- 
-  - ec2_instance_facts:
-     region: us-west-2
-     filters:
-      "tag:Name": Webserver
-      instance-state-name: running
-    register: ws_facts
+  
+  - set_fact: my_ip={{ ws_facts.instances[0].public_ip_address }}
+    register: my_ip
   
   - name: sleep for 15 seconds and continue with play
     wait_for: timeout=15
